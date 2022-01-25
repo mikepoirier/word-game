@@ -8,9 +8,9 @@ use self::{xmpp::XmppRunner, console::ConsoleRunner};
 pub mod xmpp;
 pub mod console;
 
-#[async_trait]
+#[async_trait(?Send)]
 pub trait Runner {
-    async fn run(&self, game: Arc<Mutex<WordGame>>) -> AppResult<()>;
+    async fn run(&mut self, game: Arc<Mutex<WordGame>>) -> AppResult<()>;
 }
 
 #[derive(Debug, Clone)]

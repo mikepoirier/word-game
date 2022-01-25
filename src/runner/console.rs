@@ -25,9 +25,9 @@ impl Default for ConsoleRunner {
 const PLAYER_1_USERNAME: &str = "player1";
 const PLAYER_2_USERNAME: &str = "player2";
 
-#[async_trait]
+#[async_trait(?Send)]
 impl Runner for ConsoleRunner {
-    async fn run(&self, word_game: Arc<Mutex<WordGame>>) -> AppResult<()> {
+    async fn run(&mut self, word_game: Arc<Mutex<WordGame>>) -> AppResult<()> {
         println!("Welcome to the word game!");
         let player_1_name = prompt("Enter player 1's name:");
         let word_game = word_game;
