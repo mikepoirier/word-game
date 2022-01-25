@@ -1,7 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{sync::{Arc, Mutex}, fmt::Display};
 
 use crate::{database::DatabaseEnum, AppResult, ApplicationError};
-use chrono::Utc;
+use chrono::{Utc, TimeZone};
 use uuid::Uuid;
 
 pub struct WordGame {
@@ -125,7 +125,7 @@ impl WordGame {
         Ok(player)
     }
 
-    fn get_game(&self, game_id: &str) -> AppResult<Game> {
+    pub fn get_game(&self, game_id: &str) -> AppResult<Game> {
         let db = self.database.clone();
         let db = db.lock().unwrap();
         let game = db.get_game(game_id)?
@@ -211,5 +211,35 @@ impl Game {
             player_2_username: None,
             guesses: vec![],
         }
+    }
+}
+
+impl Display for Game {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut guesses = String::new();
+        let p1 = self.player_1_username.as_ref().map_or("???", |s| s.as_str());
+        let p2 = self.player_2_username.as_ref().map_or("???", |s| s.as_str());
+        guesses.push_str(p1);
+        guesses.push('\t');
+        guesses.push_str(p2);
+        guesses.push('\n');
+        self.guesses.iter().for_each(|g| {
+            if let Some(g1) = &g.0 {
+                guesses.push_str(g1);
+            }
+            if let Some(g2) = &g.1 {
+                guesses.push('\t');
+                guesses.push_str(g2);
+            }
+            guesses.push('\n');
+
+        });
+        let start = Utc.timestamp(self.start_time, 0);
+        let end = match self.end_time {
+            Some(end) => Utc.timestamp(end, 0),
+            None => Utc::now()
+        };
+        let duration = end - start;
+        write!(f, "Guesses:\n{}\nDuration: {}", guesses.trim(), duration)
     }
 }

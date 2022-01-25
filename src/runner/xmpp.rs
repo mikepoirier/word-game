@@ -1,8 +1,8 @@
 use std::{sync::{Arc, Mutex}, convert::TryFrom};
 
 use async_trait::async_trait;
-use futures::StreamExt;
-use tokio_xmpp::{AsyncClient, Event};
+
+use tokio_xmpp::{Event};
 use xmpp_parsers::{
     message::{Message, Body}, 
     presence::{Presence, Show as PresenceShow, Type as PresenceType},
@@ -28,9 +28,15 @@ impl XmppRunner {
     }
 }
 
+impl Default for XmppRunner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl Runner for XmppRunner {
-    async fn run(&self, game: Arc<Mutex<WordGame>>) -> AppResult<()> {
+    async fn run(&self, _game: Arc<Mutex<WordGame>>) -> AppResult<()> {
         // while self.running {
         //     let client = self.client.clone();
         //     let client = client.lock().unwrap();

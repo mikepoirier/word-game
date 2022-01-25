@@ -16,6 +16,12 @@ impl ConsoleRunner {
     }
 }
 
+impl Default for ConsoleRunner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 const PLAYER_1_USERNAME: &str = "player1";
 const PLAYER_2_USERNAME: &str = "player2";
 
@@ -24,7 +30,7 @@ impl Runner for ConsoleRunner {
     async fn run(&self, word_game: Arc<Mutex<WordGame>>) -> AppResult<()> {
         println!("Welcome to the word game!");
         let player_1_name = prompt("Enter player 1's name:");
-        let word_game = word_game.clone();
+        let word_game = word_game;
         let mut word_game = word_game.lock().unwrap();
         let p1 = word_game.create_player(PLAYER_1_USERNAME, player_1_name.as_str())?;
         let player_2_name = prompt("Enter player 2's name:");
@@ -45,26 +51,28 @@ impl Runner for ConsoleRunner {
             word_game.submit_guess(&p2.username, &p2_guess)?;
 
             if !word_game.is_game_complete(&game_id)? {
-                println!("Aww, shucks... Those didn't match. Here are the current guesses:");
-                print_guesses(&word_game, &game_id)?;
+                println!("Aww, shucks... Those didn't match.");
+                let game = word_game.get_game(&game_id)?;
+                println!("{}", &game);
             }
         }
 
         println!("{} and {}, you won!!! Congrats!", p1, p2);
-        print_guesses(&word_game, &game_id)?;
+        let game = word_game.get_game(&game_id)?;
+        println!("{}", &game);
 
         Ok(())
     }
 }
 
-fn print_guesses(word_game: &WordGame, game_id: &str) -> AppResult<()> {
-    for (i, (g1, g2)) in word_game.get_guesses(game_id)?.iter().enumerate() {
-        let round = i + 1;
-        println!("{}) {}\t{}", round, g1.as_ref().unwrap(), g2.as_ref().unwrap())
-    }
+// fn print_guesses(word_game: &WordGame, game_id: &str) -> AppResult<()> {
+//     for (i, (g1, g2)) in word_game.get_guesses(game_id)?.iter().enumerate() {
+//         let round = i + 1;
+//         println!("{}) {}\t{}", round, g1.as_ref().unwrap(), g2.as_ref().unwrap())
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 fn prompt(prompt: &str) -> String {
     print!("{} ", prompt);
