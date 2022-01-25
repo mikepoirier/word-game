@@ -1565,7 +1565,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "word-game-bot"
+name = "word-game"
 version = "0.1.0"
 dependencies = [
  "async-trait",

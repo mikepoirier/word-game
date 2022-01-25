@@ -1,19 +1,22 @@
-use std::{sync::{Arc, Mutex}, fmt::Display};
+use std::{
+    fmt::Display,
+    sync::{Arc, Mutex},
+};
 
-use crate::{database::DatabaseEnum, AppResult, ApplicationError};
-use chrono::{Utc, TimeZone};
+use crate::{database::DatabaseEnum, AppResult, ApplicationError, time::duration::FormattedDuration};
+use chrono::prelude::*;
 use uuid::Uuid;
 
 pub struct WordGame {
-    database: Arc<Mutex<DatabaseEnum>>
+    database: Arc<Mutex<DatabaseEnum>>,
 }
 
 impl WordGame {
     pub fn new(database: Arc<Mutex<DatabaseEnum>>) -> Self {
         Self { database }
     }
-    
-    pub fn create_player(&mut self, username: &str, display_name: &str) -> AppResult<Player>  {
+
+    pub fn create_player(&mut self, username: &str, display_name: &str) -> AppResult<Player> {
         let player = Player::new(username, display_name);
         self.save_player(&player)?;
         Ok(player)
@@ -25,7 +28,7 @@ impl WordGame {
         self.save_game(&game)?;
         Ok(game)
     }
-    
+
     //Join game
     pub fn join_game(&mut self, username: &str, game_id: &str) -> AppResult<()> {
         let mut player = self.get_player(username)?;
@@ -37,7 +40,11 @@ impl WordGame {
         } else if game.player_2_username == None {
             game.player_2_username = Some(player.username.clone());
         } else {
-            return Err(ApplicationError::new("cannot join error", "Game is full", None));
+            return Err(ApplicationError::new(
+                "cannot join error",
+                "Game is full",
+                None,
+            ));
         }
         self.save_game(&game)?;
 
@@ -62,8 +69,11 @@ impl WordGame {
     //Guess
     pub fn submit_guess(&mut self, username: &str, guess: &str) -> AppResult<()> {
         let player = self.get_player(username)?;
-        let current_game = player.current_game_id
-            .ok_or(ApplicationError::new("no current game", "Player does not have a current game", None))?;
+        let current_game = player.current_game_id.ok_or(ApplicationError::new(
+            "no current game",
+            "Player does not have a current game",
+            None,
+        ))?;
         let mut game = self.get_game(&current_game)?;
 
         if game.guesses.len() <= game.current_round {
@@ -74,20 +84,30 @@ impl WordGame {
             if game.guesses[game.current_round].0 == None {
                 game.guesses[game.current_round].0 = Some(guess.into());
             } else {
-                return Err(ApplicationError::new("already guessed", "Player already guessed for this round", None));
+                return Err(ApplicationError::new(
+                    "already guessed",
+                    "Player already guessed for this round",
+                    None,
+                ));
             }
         } else if Some(username.to_string()) == game.player_2_username {
             if game.guesses[game.current_round].1 == None {
                 game.guesses[game.current_round].1 = Some(guess.into());
             } else {
-                return Err(ApplicationError::new("already guessed", "Player already guessed for this round", None));
+                return Err(ApplicationError::new(
+                    "already guessed",
+                    "Player already guessed for this round",
+                    None,
+                ));
             }
         }
 
-        let p1_guess = game.guesses[game.current_round].0
+        let p1_guess = game.guesses[game.current_round]
+            .0
             .as_ref()
             .map(|g| g.to_lowercase());
-        let p2_guess = game.guesses[game.current_round].1
+        let p2_guess = game.guesses[game.current_round]
+            .1
             .as_ref()
             .map(|g| g.to_lowercase());
 
@@ -120,16 +140,24 @@ impl WordGame {
     fn get_player(&self, username: &str) -> AppResult<Player> {
         let db = self.database.clone();
         let db = db.lock().unwrap();
-        let player = db.get_player_by_username(username)?
-            .ok_or(ApplicationError::new("player not found", "Could not find player", None))?;
+        let player = db
+            .get_player_by_username(username)?
+            .ok_or(ApplicationError::new(
+                "player not found",
+                "Could not find player",
+                None,
+            ))?;
         Ok(player)
     }
 
     pub fn get_game(&self, game_id: &str) -> AppResult<Game> {
         let db = self.database.clone();
         let db = db.lock().unwrap();
-        let game = db.get_game(game_id)?
-            .ok_or(ApplicationError::new("game not found", "Could not find game", None))?;
+        let game = db.get_game(game_id)?.ok_or(ApplicationError::new(
+            "game not found",
+            "Could not find game",
+            None,
+        ))?;
         Ok(game)
     }
 
@@ -174,7 +202,7 @@ impl Player {
         Self {
             username: username.into(),
             display_name: display_name.into(),
-            current_game_id: None
+            current_game_id: None,
         }
     }
 }
@@ -217,8 +245,14 @@ impl Game {
 impl Display for Game {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut guesses = String::new();
-        let p1 = self.player_1_username.as_ref().map_or("???", |s| s.as_str());
-        let p2 = self.player_2_username.as_ref().map_or("???", |s| s.as_str());
+        let p1 = self
+            .player_1_username
+            .as_ref()
+            .map_or("???", |s| s.as_str());
+        let p2 = self
+            .player_2_username
+            .as_ref()
+            .map_or("???", |s| s.as_str());
         guesses.push_str(p1);
         guesses.push('\t');
         guesses.push_str(p2);
@@ -232,14 +266,15 @@ impl Display for Game {
                 guesses.push_str(g2);
             }
             guesses.push('\n');
-
         });
         let start = Utc.timestamp(self.start_time, 0);
         let end = match self.end_time {
             Some(end) => Utc.timestamp(end, 0),
-            None => Utc::now()
+            None => Utc::now(),
         };
         let duration = end - start;
+        let duration = FormattedDuration::from(duration);
+
         write!(f, "Guesses:\n{}\nDuration: {}", guesses.trim(), duration)
     }
 }

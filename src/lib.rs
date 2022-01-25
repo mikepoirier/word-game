@@ -1,6 +1,7 @@
 pub mod runner;
 pub mod game;
 pub mod database;
+pub mod time;
 
 #[derive(Debug)]
 pub struct ApplicationError {

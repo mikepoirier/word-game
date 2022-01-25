@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use word_game_bot::{
+use word_game::{
     database::{DatabaseFactory, DatabaseType},
     game::WordGame,
     runner::{RunnerFactory, RunnerType},
