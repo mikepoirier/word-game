@@ -4,6 +4,7 @@ pub mod database;
 pub mod time;
 
 #[derive(Debug)]
+#[allow(unused)]
 pub struct ApplicationError {
     kind: String,
     message: String,
