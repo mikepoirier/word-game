@@ -13,8 +13,12 @@ use xmpp_parsers::{
     message::{Body, Message, MessageType},
     presence::{Presence, Show as PresenceShow, Type as PresenceType},
     receipts::Received,
-    Element, Jid, ns::{DISCO_INFO, RECEIPTS},
+    Element, Jid, ns::{
+        DISCO_INFO, 
+        RECEIPTS
+    },
 };
+use tokio::time::{sleep, Duration};
 
 use crate::{game::WordGame, AppResult};
 
@@ -28,9 +32,11 @@ pub struct XmppRunner {
 
 impl XmppRunner {
     pub fn new() -> Self {
+        let jid = std::env::var("WORD_GAME_XMPP_JID").expect("Expected WORD_GAME_XMPP_JID");
+        let password = std::env::var("WORD_GAME_XMPP_PASSWORD").expect("Expected WORD_GAME_XMPP_PASSWORD");
         Self {
-            jid: String::from("echobot@chat.poirier.cloud"),
-            password: String::from("3choBot!"),
+            jid,
+            password,
             running: true,
         }
     }
@@ -60,38 +66,6 @@ impl Runner for XmppRunner {
                     }
                     _ => {}
                 }
-                // println!(">>> Event in {:?}", event);
-                // if event.is_online() {
-                //     send_online_presence(&mut client, event).await;
-                // } else if event.is_stanza("presence") {
-                //     let presence = parse_presence(event).unwrap();
-                //     match (presence.from, presence.type_) {
-                //         (Some(ref from), PresenceType::Subscribe) => {
-                //             println!("Got subscribe presence from: {}", &from);
-                //             let subscribed = allow_presence_subscribe(from.clone());
-                //             client.send_stanza(subscribed).await.unwrap();
-                //         }
-                //         (Some(ref from), PresenceType::Subscribed) => {
-                //             println!("Got subscribed presence from: {}", &from);
-                //         }
-                //         _ => {}
-                //     }
-                // } else if let Some(message) = parse_message(event) {
-                //     match (message.from, message.bodies.get("")) {
-                //         (Some(ref _from), Some(body)) if body.0 == "die" => {
-                //             self.running = false;
-                //         }
-                //         (Some(ref from), Some(_body)) => {
-                //             if message.type_ != MessageType::Error {
-                //                 // let presence_accept = allow_presence_subscribe(from.clone());
-                //                 // client.send_stanza(presence_accept).await.unwrap();
-                //                 let reply = make_reply(from.clone(), "Hello!");
-                //                 client.send_stanza(reply).await.unwrap();
-                //             }
-                //         }
-                //         _ => {}
-                //     }
-                // }
             }
         }
 
@@ -133,6 +107,8 @@ async fn handle_stanza(stanza: Element, client: &mut AsyncClient) {
                     let receipt = make_receipt(from.clone(), &id);
                     client.send_stanza(receipt).await.unwrap();
                 }
+
+                sleep(Duration::from_millis(500)).await;
 
                 let reply = make_reply(from.clone(), "Hello!");
                 client.send_stanza(reply).await.unwrap();
@@ -197,7 +173,10 @@ fn make_service_discovery(to: &Jid, id: &str) -> Element {
     let disco_info = DiscoInfoResult{
         node: None,
         identities: vec![],
-        features: vec![Feature::new(RECEIPTS)],
+        features: vec![
+            Feature::new(RECEIPTS),
+            Feature::new(DISCO_INFO),
+        ],
         extensions: vec![],
     };
     let iq = Iq::from_result(id, Some(disco_info))
