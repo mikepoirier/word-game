@@ -150,6 +150,15 @@ impl WordGame {
         Ok(player)
     }
 
+    pub fn has_player(&self, username: &str) -> bool {
+        let db = self.database.clone();
+        let db = db.lock().unwrap();
+        match db.get_player_by_username(username) {
+            Ok(Some(_)) => true,
+            _ => false
+        }
+    }
+
     pub fn get_game(&self, game_id: &str) -> AppResult<Game> {
         let db = self.database.clone();
         let db = db.lock().unwrap();

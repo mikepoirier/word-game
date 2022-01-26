@@ -16,11 +16,10 @@ use xmpp_parsers::{
     Element, Jid, ns::{
         DISCO_INFO, 
         RECEIPTS
-    },
+    }, BareJid,
 };
-use tokio::time::{sleep, Duration};
 
-use crate::{game::WordGame, AppResult};
+use crate::{game::WordGame, AppResult, ApplicationError};
 
 use super::Runner;
 
@@ -50,7 +49,7 @@ impl Default for XmppRunner {
 
 #[async_trait(?Send)]
 impl Runner for XmppRunner {
-    async fn run(&mut self, _game: Arc<Mutex<WordGame>>) -> AppResult<()> {
+    async fn run(&mut self, game: Arc<Mutex<WordGame>>) -> AppResult<()> {
         let mut client = AsyncClient::new(&self.jid, &self.password).unwrap();
 
         client.set_reconnect(false);
@@ -62,12 +61,15 @@ impl Runner for XmppRunner {
                         handle_online(&bound_jid, &mut client).await;
                     }
                     Event::Stanza(s) => {
-                        handle_stanza(s, &mut client).await;
+                        handle_stanza(s, &mut client, game.clone()).await;
                     }
                     _ => {}
                 }
             }
         }
+
+        client.send_end().await
+            .map_err(|e| ApplicationError::new("Close Client Error", &format!("{}", e), None))?;
 
         Ok(())
     }
@@ -79,7 +81,7 @@ async fn handle_online(bound_jid: &Jid, client: &mut AsyncClient) {
     client.send_stanza(presence).await.unwrap();
 }
 
-async fn handle_stanza(stanza: Element, client: &mut AsyncClient) {
+async fn handle_stanza(stanza: Element, client: &mut AsyncClient, game: Arc<Mutex<WordGame>>) {
     if let Some(presence) = Presence::try_from(stanza.clone()).ok() {
         match (&presence.from, &presence.type_) {
             (Some(ref from), PresenceType::Subscribe) => {
@@ -93,25 +95,34 @@ async fn handle_stanza(stanza: Element, client: &mut AsyncClient) {
             _ => {}
         }
     } else if let Some(message) = Message::try_from(stanza.clone()).ok() {
+
         match (
             message.id,
             message.from,
             message.bodies.get(""),
             message.payloads,
         ) {
-            (Some(id), Some(ref from), Some(_body), payloads)
+            (Some(id), Some(from), Some(body), payloads)
                 if message.type_ != MessageType::Error =>
             {
-                if should_ack(payloads) {
-                    println!("Ack requested for message {}", id);
-                    let receipt = make_receipt(from.clone(), &id);
-                    client.send_stanza(receipt).await.unwrap();
+                handle_ack(payloads, &from, id, client).await;
+
+                if body.0.starts_with("/status") {
+                    let game = game.lock().unwrap();
+                    let username = format!("{}", BareJid::from(from.clone()));
+                    let reply = if game.has_player(&username) {
+                        format!("Hello, {}!", username)
+                    } else {
+                        "You have not joined the word game! Please create a player profile!".to_string()
+                    };
+                    let reply = make_reply(from.clone(), &reply);
+                    client.send_stanza(reply).await.unwrap();
+                } else {
+                    let username = format!("{}", BareJid::from(from.clone()));
+                    let reply = format!("Hello, {}! Please enter a command to start playing!\n{}", username, list_commands());
+                    let reply = make_reply(from.clone(), &reply);
+                    client.send_stanza(reply).await.unwrap();
                 }
-
-                sleep(Duration::from_millis(500)).await;
-
-                let reply = make_reply(from.clone(), "Hello!");
-                client.send_stanza(reply).await.unwrap();
             }
             _ => {}
         }
@@ -130,6 +141,13 @@ async fn handle_stanza(stanza: Element, client: &mut AsyncClient) {
         }
     } else {
         println!("Unhandled stanza: {:?}", stanza);
+    }
+}
+
+async fn handle_ack(payloads: Vec<Element>, from: &Jid, id: String, client: &mut AsyncClient) {
+    if should_ack(payloads) {
+        let receipt = make_receipt(from.clone(), &id);
+        client.send_stanza(receipt).await.unwrap();
     }
 }
 
@@ -183,4 +201,12 @@ fn make_service_discovery(to: &Jid, id: &str) -> Element {
         .with_to(to.clone());
 
     iq.into()
+}
+
+fn list_commands() -> String {
+    let commands_list = ["status", ""];
+    let mut commands = String::from("Commands:");
+    commands_list.iter()
+        .for_each(|&c| commands.push_str(&format!("\n/{}", c)));
+    commands
 }
