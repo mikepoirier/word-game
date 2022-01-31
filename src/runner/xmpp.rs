@@ -204,7 +204,7 @@ fn make_service_discovery(to: &Jid, id: &str) -> Element {
 }
 
 fn list_commands() -> String {
-    let commands_list = ["status", ""];
+    let commands_list = ["status"];
     let mut commands = String::from("Commands:");
     commands_list.iter()
         .for_each(|&c| commands.push_str(&format!("\n/{}", c)));

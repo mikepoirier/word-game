@@ -69,58 +69,58 @@ impl WordGame {
     //Guess
     pub fn submit_guess(&mut self, username: &str, guess: &str) -> AppResult<()> {
         let player = self.get_player(username)?;
-        let current_game = player.current_game_id.ok_or(ApplicationError::new(
-            "no current game",
-            "Player does not have a current game",
-            None,
-        ))?;
-        let mut game = self.get_game(&current_game)?;
+        // let current_game = player.current_game_id.ok_or(ApplicationError::new(
+        //     "no current game",
+        //     "Player does not have a current game",
+        //     None,
+        // ))?;
+        // let mut game = self.get_game(&current_game)?;
 
-        if game.guesses.len() <= game.current_round {
-            game.guesses.push((None, None));
-        }
+        // if game.guesses.len() <= game.current_round {
+        //     game.guesses.push((None, None));
+        // }
 
-        if Some(username.to_string()) == game.player_1_username {
-            if game.guesses[game.current_round].0 == None {
-                game.guesses[game.current_round].0 = Some(guess.into());
-            } else {
-                return Err(ApplicationError::new(
-                    "already guessed",
-                    "Player already guessed for this round",
-                    None,
-                ));
-            }
-        } else if Some(username.to_string()) == game.player_2_username {
-            if game.guesses[game.current_round].1 == None {
-                game.guesses[game.current_round].1 = Some(guess.into());
-            } else {
-                return Err(ApplicationError::new(
-                    "already guessed",
-                    "Player already guessed for this round",
-                    None,
-                ));
-            }
-        }
+        // if Some(username.to_string()) == game.player_1_username {
+        //     if game.guesses[game.current_round].0 == None {
+        //         game.guesses[game.current_round].0 = Some(guess.into());
+        //     } else {
+        //         return Err(ApplicationError::new(
+        //             "already guessed",
+        //             "Player already guessed for this round",
+        //             None,
+        //         ));
+        //     }
+        // } else if Some(username.to_string()) == game.player_2_username {
+        //     if game.guesses[game.current_round].1 == None {
+        //         game.guesses[game.current_round].1 = Some(guess.into());
+        //     } else {
+        //         return Err(ApplicationError::new(
+        //             "already guessed",
+        //             "Player already guessed for this round",
+        //             None,
+        //         ));
+        //     }
+        // }
 
-        let p1_guess = game.guesses[game.current_round]
-            .0
-            .as_ref()
-            .map(|g| g.to_lowercase());
-        let p2_guess = game.guesses[game.current_round]
-            .1
-            .as_ref()
-            .map(|g| g.to_lowercase());
+        // let p1_guess = game.guesses[game.current_round]
+        //     .0
+        //     .as_ref()
+        //     .map(|g| g.to_lowercase());
+        // let p2_guess = game.guesses[game.current_round]
+        //     .1
+        //     .as_ref()
+        //     .map(|g| g.to_lowercase());
 
-        if p1_guess == p2_guess {
-            game.complete = true;
-            game.end_time = Some(Utc::now().timestamp());
-        }
+        // if p1_guess == p2_guess {
+        //     game.complete = true;
+        //     game.end_time = Some(Utc::now().timestamp());
+        // }
 
-        if p1_guess != None && p2_guess != None {
-            game.current_round += 1;
-        }
+        // if p1_guess != None && p2_guess != None {
+        //     game.current_round += 1;
+        // }
 
-        self.save_game(&game)?;
+        // self.save_game(&game)?;
 
         Ok(())
     }
@@ -202,23 +202,41 @@ impl WordGame {
 #[derive(Debug, Clone)]
 pub struct Player {
     pub username: String,
-    pub display_name: String,
-    current_game_id: Option<String>,
+    pub display_name: Option<String>,
+    pub status: PlayerStatus,
 }
 
 impl Player {
-    pub fn new(username: &str, display_name: &str) -> Self {
+    pub fn new(username: &str) -> Self {
         Self {
             username: username.into(),
-            display_name: display_name.into(),
-            current_game_id: None,
+            display_name: None,
+            status: PlayerStatus::New,
         }
     }
 }
 
 impl std::fmt::Display for Player {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.display_name)
+        match self.display_name {
+            Some(name) => write!(f, "{}", name),
+            None => write!(f, "{}", self.username),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum PlayerStatus {
+    New,
+    Introducing,
+}
+
+impl std::fmt::Display for PlayerStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PlayerStatus::New => write!(f, "NEW"),
+            PlayerStatus::Introducing => write!(f, "INTRODUCING"),
+        }
     }
 }
 
