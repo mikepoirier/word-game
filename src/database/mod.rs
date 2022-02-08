@@ -1,4 +1,4 @@
-use crate::{game::{Player, Game}, AppResult, trait_enum};
+use crate::{game::{game::Game, player::Player}, AppResult, trait_enum};
 
 use self::in_memory::InMemoryDatabase;
 

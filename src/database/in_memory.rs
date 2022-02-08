@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{game::{Player, Game}, AppResult};
+use crate::{game::{player::Player, game::Game}, AppResult};
 
 use super::Database;
 
@@ -39,7 +39,7 @@ impl Database for InMemoryDatabase {
         Ok(self.players.get(username).cloned())
     }
 
-    fn save_game(&mut self, game: crate::game::Game) -> AppResult<()> {
+    fn save_game(&mut self, game: Game) -> AppResult<()> {
         self.games.insert(game.id.clone(), game);
 
         Ok(())

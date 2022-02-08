@@ -1,6 +1,6 @@
 use std::{
     convert::TryFrom,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex}, str::FromStr,
 };
 
 use async_trait::async_trait;
@@ -11,15 +11,16 @@ use xmpp_parsers::{
     disco::{DiscoInfoResult, Feature},
     iq::{Iq, IqType},
     message::{Body, Message, MessageType},
+    ns::{DISCO_INFO, RECEIPTS},
     presence::{Presence, Show as PresenceShow, Type as PresenceType},
     receipts::Received,
-    Element, Jid, ns::{
-        DISCO_INFO, 
-        RECEIPTS
-    }, BareJid,
+    BareJid, Element, Jid,
 };
 
-use crate::{game::WordGame, AppResult, ApplicationError};
+use crate::{
+    game::{player::PlayerStatus, WordGame},
+    AppResult, ApplicationError,
+};
 
 use super::Runner;
 
@@ -32,7 +33,8 @@ pub struct XmppRunner {
 impl XmppRunner {
     pub fn new() -> Self {
         let jid = std::env::var("WORD_GAME_XMPP_JID").expect("Expected WORD_GAME_XMPP_JID");
-        let password = std::env::var("WORD_GAME_XMPP_PASSWORD").expect("Expected WORD_GAME_XMPP_PASSWORD");
+        let password =
+            std::env::var("WORD_GAME_XMPP_PASSWORD").expect("Expected WORD_GAME_XMPP_PASSWORD");
         Self {
             jid,
             password,
@@ -68,7 +70,9 @@ impl Runner for XmppRunner {
             }
         }
 
-        client.send_end().await
+        client
+            .send_end()
+            .await
             .map_err(|e| ApplicationError::new("Close Client Error", &format!("{}", e), None))?;
 
         Ok(())
@@ -95,33 +99,105 @@ async fn handle_stanza(stanza: Element, client: &mut AsyncClient, game: Arc<Mute
             _ => {}
         }
     } else if let Some(message) = Message::try_from(stanza.clone()).ok() {
-
         match (
             message.id,
             message.from,
             message.bodies.get(""),
             message.payloads,
         ) {
-            (Some(id), Some(from), Some(body), payloads)
-                if message.type_ != MessageType::Error =>
-            {
+            (Some(id), Some(from), Some(body), payloads) if message.type_ != MessageType::Error => {
                 handle_ack(payloads, &from, id, client).await;
 
-                if body.0.starts_with("/status") {
-                    let game = game.lock().unwrap();
-                    let username = format!("{}", BareJid::from(from.clone()));
-                    let reply = if game.has_player(&username) {
-                        format!("Hello, {}!", username)
-                    } else {
-                        "You have not joined the word game! Please create a player profile!".to_string()
-                    };
-                    let reply = make_reply(from.clone(), &reply);
-                    client.send_stanza(reply).await.unwrap();
-                } else {
-                    let username = format!("{}", BareJid::from(from.clone()));
-                    let reply = format!("Hello, {}! Please enter a command to start playing!\n{}", username, list_commands());
-                    let reply = make_reply(from.clone(), &reply);
-                    client.send_stanza(reply).await.unwrap();
+                let username = format!("{}", BareJid::from(from.clone()));
+                let mut game = game.lock().unwrap();
+                let player = game.get_player(&username).unwrap();
+
+                match player.status {
+                    PlayerStatus::New => {
+                        let message = "Hello there! We haven't met before. What is your name?";
+                        let reply = make_reply(from.clone(), message);
+                        client.send_stanza(reply).await.unwrap();
+                        game.change_player_to_introducing(&username).unwrap();
+                    }
+                    PlayerStatus::Introducing => {
+                        let display_name = &body.0;
+                        let player = game.introduce_player(&username, display_name).unwrap();
+                        let message = format!("Nice to meet you {}! Welcome to the word game! If you would like to create a game, use the `/createGame` command. If you would like to join a game, use the `/join` command.", player);
+                        let reply = make_reply(from.clone(), &message);
+                        client.send_stanza(reply).await.unwrap();
+                    }
+                    PlayerStatus::InLobby => {
+                        let player_message = &body.0;
+                        if player_message.starts_with("/createGame") {
+                            let game_id = game.new_game(&username).unwrap();
+                            let message = format!("You have just created a new game! Give the code `{}` to your friend that you want to play with!", game_id);
+                            let reply = make_reply(from.clone(), &message);
+                            client.send_stanza(reply).await.unwrap();
+                        } else if player_message.starts_with("/join") {
+                            game.debug();
+                            match player_message.split_ascii_whitespace().nth(1) {
+                                Some(game_id) => {
+                                    match game.join_game(&username, game_id) {
+                                        Ok(_) => {
+                                            let message = "You have joined the game!";
+                                            let reply = make_reply(from.clone(), message);
+                                            client.send_stanza(reply).await.unwrap();
+                                            let other_players = game.get_players_in_game(game_id).unwrap();
+                                            for username in other_players {
+                                                if username == player.username {
+                                                    break;
+                                                }
+                                                let jid = Jid::from_str(&username).unwrap();
+                                                let message = format!("{} has joined the game!", player);
+                                                let reply = make_reply(jid, &message);
+                                                client.send_stanza(reply).await.unwrap();
+                                            }
+                                        }
+                                        Err(e) => {
+                                            let message = format!("There was an issue joining the game. Here are the details: {}", e.message);
+                                            let reply = make_reply(from.clone(), &message);
+                                            client.send_stanza(reply).await.unwrap();
+                                        }
+                                    }
+                                }
+                                None => {
+                                    let message = "Please include a game ID!";
+                                    let reply = make_reply(from.clone(), message);
+                                    client.send_stanza(reply).await.unwrap();
+                                }
+                            }
+                        }
+                    }
+                    PlayerStatus::InGame { ref game_id } => {
+                        let player_message = &body.0;
+                        if player_message.starts_with("/guess") {
+                            match player_message.split_ascii_whitespace().nth(1) {
+                                Some(guess) => {
+                                    match game.submit_guess(&username, game_id, guess) {
+                                        Ok(win) => {
+                                            if win {
+                                                let players = game.get_players_in_game(game_id).unwrap();
+                                                for username in players {
+                                                    let jid = Jid::from_str(&username).unwrap();
+                                                    let message = "You won!!!";
+                                                    let reply = make_reply(jid, message);
+                                                    client.send_stanza(reply).await.unwrap();
+                                                }
+                                            }
+                                        },
+                                        Err(_) => {
+
+                                        },
+                                    }
+                                },
+                                None => {
+                                    let message = "Please include a guess!";
+                                    let reply = make_reply(from.clone(), message);
+                                    client.send_stanza(reply).await.unwrap();
+                                },
+                            }
+                        }
+                    }
                 }
             }
             _ => {}
@@ -174,9 +250,9 @@ fn make_reply(to: Jid, body: &str) -> Element {
 }
 
 fn should_ack(payloads: Vec<Element>) -> bool {
-    payloads.iter().any(|element| {
-        element.name() == "request" && element.ns() == "urn:xmpp:receipts"
-    })
+    payloads
+        .iter()
+        .any(|element| element.name() == "request" && element.ns() == "urn:xmpp:receipts")
 }
 
 fn make_receipt(to: Jid, id: &str) -> Element {
@@ -188,25 +264,13 @@ fn make_receipt(to: Jid, id: &str) -> Element {
 }
 
 fn make_service_discovery(to: &Jid, id: &str) -> Element {
-    let disco_info = DiscoInfoResult{
+    let disco_info = DiscoInfoResult {
         node: None,
         identities: vec![],
-        features: vec![
-            Feature::new(RECEIPTS),
-            Feature::new(DISCO_INFO),
-        ],
+        features: vec![Feature::new(RECEIPTS), Feature::new(DISCO_INFO)],
         extensions: vec![],
     };
-    let iq = Iq::from_result(id, Some(disco_info))
-        .with_to(to.clone());
+    let iq = Iq::from_result(id, Some(disco_info)).with_to(to.clone());
 
     iq.into()
-}
-
-fn list_commands() -> String {
-    let commands_list = ["status"];
-    let mut commands = String::from("Commands:");
-    commands_list.iter()
-        .for_each(|&c| commands.push_str(&format!("\n/{}", c)));
-    commands
 }
