@@ -136,6 +136,7 @@ impl WordGame {
     pub fn submit_guess(&self, username: &str, game_id: &str, guess: &str) -> AppResult<bool> {
         let mut game = self.find_game(game_id)?;
         let win = game.add_guess(username, guess)?;
+        self.save_game(&game)?;
         Ok(win)
     }
 }

@@ -134,7 +134,6 @@ async fn handle_stanza(stanza: Element, client: &mut AsyncClient, game: Arc<Mute
                             let reply = make_reply(from.clone(), &message);
                             client.send_stanza(reply).await.unwrap();
                         } else if player_message.starts_with("/join") {
-                            game.debug();
                             match player_message.split_ascii_whitespace().nth(1) {
                                 Some(game_id) => {
                                     match game.join_game(&username, game_id) {
@@ -183,7 +182,12 @@ async fn handle_stanza(stanza: Element, client: &mut AsyncClient, game: Arc<Mute
                                                     let reply = make_reply(jid, message);
                                                     client.send_stanza(reply).await.unwrap();
                                                 }
+                                            } else {
+                                                let message = "Oops! Try again!";
+                                                let reply = make_reply(from.clone(), message);
+                                                client.send_stanza(reply).await.unwrap();
                                             }
+                                            game.debug()
                                         },
                                         Err(_) => {
 
